@@ -76,8 +76,3 @@ df_final.fillna('None', inplace=True)
 print(df_final.to_string())
 output_file = os.path.join(folder_path, 'S16A2_complete_cases.csv')
 df_final.to_csv(output_file, index=False)
-
-
-                   
-            
-    

@@ -3,7 +3,7 @@
 import pandas as pd
 import os 
 
-file_path = os.path.join("/Users/kason/MSc_ACS_Thesis/S16_amplicon/S16A2", "sample_16_amplicon2_annotated_cycles.txt")
+file_path = os.path.join("/Users/admin/S16_AA", "sample_16_amplicon2_annotated_cycles.txt")
 
 # First, find where the cycle data starts
 with open(file_path, 'r') as f:
@@ -52,7 +52,7 @@ filtered_df['Cycle'] = pd.to_numeric(filtered_df['Cycle'], downcast='integer', e
 
 # 3. Use 'filtered_df' for printing and saving
 print(filtered_df)
-filtered_df.to_csv('/Users/kason/MSc_ACS_Thesis/S16_amplicon/S16A1/S16A2_cycle.csv', index=False)
+filtered_df.to_csv('/Users/admin/S16_AA/S16A2_cycle.csv', index=False)
 
 
 

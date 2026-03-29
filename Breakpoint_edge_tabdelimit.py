@@ -2,7 +2,7 @@
 import pandas as pd
 import os 
 
-file_path = os.path.join("/Users/kason/MSc_ACS_Thesis/S16_amplicon/S16A1", "sample_16_amplicon1_graph (1).txt")
+file_path = os.path.join("/Users/admin/S16_AA", "sample_16_amplicon2_graph.txt")
 
 column_headers = [
     'BreakpointEdge', 
@@ -31,24 +31,29 @@ df_breakpoint = pd.read_csv(
     names=column_headers
 )
 
-df_breakpoint[['Start_Position', 'End_Position']] = df_breakpoint['StartPosition->EndPosition'].str.split('->', expand=True)
+# 3. Create the combined Start and End columns by splitting the original column
+# This keeps the orientation (+/-) attached to the coordinate
+df_breakpoint[['Start_Pos', 'End_Pos']] = df_breakpoint['StartPosition->EndPosition'].str.split('->', expand=True)
 
-#Split Start & End Positions columns into number + orientation 
-df_breakpoint[['Start_Coordinate', 'Start_Position_Orientation']] = df_breakpoint['Start_Position'].str.extract(r'(.*?\d+)([+-])')
-df_breakpoint[['End_Coordinate', 'End_Position_Orientation']] = df_breakpoint['End_Position'].str.extract(r'(.*?\d+)([+-])')
-#print(df_breakpoint_reordered[['Start_Coordinate', 'Start_Position_Orientation']])
+# 4. Drop the original combined column
+df_breakpoint = df_breakpoint.drop(columns=['StartPosition->EndPosition'])
 
-#Drop column start_position afterwards for cleaner output 
-df_breakpoint = df_breakpoint.drop(columns=['Start_Position'])
-df_breakpoint= df_breakpoint.drop(columns=['End_Position'])
+# 5. Filter for "discordant" edges
+filtered_df = df_breakpoint[df_breakpoint['BreakpointEdge'] == 'discordant'].copy()
 
-#FIlter "BreakpointEdge" column 
-filtered_df_breakpoint = df_breakpoint[df_breakpoint['BreakpointEdge'] == 'discordant'].copy()
+# 6. Reorder columns (using names is safer than using iloc indices)
+# This puts Start and End right after the BreakpointEdge
+cols_to_order = [
+    'BreakpointEdge', 
+    'Start_Pos', 
+    'End_Pos', 
+    'PredictedCopyCount', 
+    'NumberOfReadPairs', 
+    'HomologySizeIfAvailable', 
+    'Homology/InsertionSequence'
+]
+df_final = filtered_df[cols_to_order]
 
-#print(filtered_df_breakpoint.shape)
-
-df_breakpoint_reordered = filtered_df_breakpoint.iloc[:, [0, 6, 7, 8, 9, 1, 2, 3, 4, 5]]
-
-print(df_breakpoint_reordered)
-df_breakpoint_reordered.to_csv('/Users/kason/MSc_ACS_Thesis/S16_amplicon/S16A1/S16A1_breakpoint.csv', index=False)
-
+# Print and Save
+print(df_final)
+df_final.to_csv('/Users/admin/S16_AA/S16A2_breakpoint.csv', index=False)
