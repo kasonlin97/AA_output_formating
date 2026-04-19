@@ -1,9 +1,8 @@
-
 import pandas as pd
-import os 
+import os
 
-file_path = os.path.join("/Users/admin/S16_AA", "sample_16_amplicon2_graph.txt")
-
+# 1. Configuration
+root_dir = "/Users/admin/MSc_Project/Extracted_ecDNA_Results"
 column_headers = [
     'BreakpointEdge', 
     'StartPosition->EndPosition', 
@@ -13,47 +12,74 @@ column_headers = [
     'Homology/InsertionSequence'
 ]
 
-# Read the file to find where the pattern starts
-with open(file_path, 'r') as f:
-    lines = f.readlines()
+all_results = []
 
-# Find the line with your pattern
-skip_rows = 0
-for i, line in enumerate(lines):
-    if line.startswith("BreakpointEdge: StartPosition->EndPosition, PredictedCopyCount, NumberOfReadPairs, HomologySizeIfAvailable(<0ForInsertions), Homology/InsertionSequence"):
-        skip_rows = i + 1  # Skip header row too
-        break
+print("Starting batch processing of graph files...")
 
-df_breakpoint = pd.read_csv(
-    file_path, 
-    sep='\t', 
-    skiprows=skip_rows, 
-    names=column_headers
-)
+# 2. Loop through the directory structure
+for root, dirs, files in os.walk(root_dir):
+    for filename in files:
+        if filename.endswith("_graph.txt"):
+            file_path = os.path.join(root, filename)
+            
+            # Extract Amplicon_ID from filename (removes '_graph.txt')
+            amplicon_id = filename.replace("_graph.txt", "")
+            
+            try:
+                # 3. Read file to find the header pattern (skip_rows logic)
+                skip_rows = 0
+                with open(file_path, 'r') as f:
+                    for i, line in enumerate(f):
+                        if "BreakpointEdge: StartPosition->EndPosition" in line:
+                            skip_rows = i + 1
+                            break
+                
+                # 4. Load the data
+                df = pd.read_csv(
+                    file_path, 
+                    sep='\t', 
+                    skiprows=skip_rows, 
+                    names=column_headers
+                )
+                
+                # If file is empty or header not found, skip
+                if df.empty:
+                    continue
 
-# 3. Create the combined Start and End columns by splitting the original column
-# This keeps the orientation (+/-) attached to the coordinate
-df_breakpoint[['Start_Pos', 'End_Pos']] = df_breakpoint['StartPosition->EndPosition'].str.split('->', expand=True)
+                # 5. Transformation Logic
+                # Split coordinates
+                df[['Start_Pos', 'End_Pos']] = df['StartPosition->EndPosition'].str.split('->', expand=True)
+                df = df.drop(columns=['StartPosition->EndPosition'])
 
-# 4. Drop the original combined column
-df_breakpoint = df_breakpoint.drop(columns=['StartPosition->EndPosition'])
+                # Filter for discordant edges
+                filtered_df = df[df['BreakpointEdge'] == 'discordant'].copy()
 
-# 5. Filter for "discordant" edges
-filtered_df = df_breakpoint[df_breakpoint['BreakpointEdge'] == 'discordant'].copy()
+                # Reorder and Insert Amplicon_ID
+                cols_to_order = [
+                    'BreakpointEdge', 'Start_Pos', 'End_Pos', 
+                    'PredictedCopyCount', 'NumberOfReadPairs', 
+                    'HomologySizeIfAvailable', 'Homology/InsertionSequence'
+                ]
+                df_breakpoint = filtered_df[cols_to_order]
+                df_breakpoint.insert(0, 'Amplicon_ID', amplicon_id)
 
-# 6. Reorder columns (using names is safer than using iloc indices)
-# This puts Start and End right after the BreakpointEdge
-cols_to_order = [
-    'BreakpointEdge', 
-    'Start_Pos', 
-    'End_Pos', 
-    'PredictedCopyCount', 
-    'NumberOfReadPairs', 
-    'HomologySizeIfAvailable', 
-    'Homology/InsertionSequence'
-]
-df_final = filtered_df[cols_to_order]
+                # Collect the processed dataframe
+                all_results.append(df_breakpoint)
+                print(f"Processed: {amplicon_id}")
 
-# Print and Save
-print(df_final)
-df_final.to_csv('/Users/admin/S16_AA/S16A2_breakpoint.csv', index=False)
+            except Exception as e:
+                print(f"Error processing {filename}: {e}")
+
+# 6. Combine all amplicons into one master dataframe
+if all_results:
+    master_df = pd.concat(all_results, ignore_index=True)
+    
+    # Save the combined result
+    output_path = "/Users/admin/MSc_Project/TCGA_ecDNA_Breakpoints.csv"
+    master_df.to_csv(output_path, index=False)
+    
+    print(f"\nSuccess! Combined {len(all_results)} files into {output_path}")
+    print(master_df.head())
+else:
+    print("No matching files were found or processed.")
+
