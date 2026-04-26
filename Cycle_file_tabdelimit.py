@@ -86,7 +86,7 @@ if all_annotated_results:
     master_df = pd.concat(all_annotated_results, ignore_index=True)
     
     # Save the master table
-    output_path = "/Users/admin/MSc_Project/TCGA_ecDNA_AnnotatedCycles.csv"
+    output_path = "/Users/admin/MSc_Project/ecDNA_BP_mapping/TCGA_ecDNA_AnnotatedCycles.csv"
     master_df.to_csv(output_path, index=False)
     
     print(f"\nSuccess! Combined {len(all_annotated_results)} files.")

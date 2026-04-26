@@ -73,7 +73,7 @@ for root, dirs, files in os.walk(root_dir):
 # 8. Combine all amplicons into one master CSV
 if all_segments:
     master_df = pd.concat(all_segments, ignore_index=True)
-    output_path = "/Users/admin/MSc_Project/TCGA_ecDNA_Segments.csv"
+    output_path = "/Users/admin/MSc_Project/ecDNA_BP_mapping/TCGA_ecDNA_Segments.csv"
     master_df.to_csv(output_path, index=False)
     
     print(f"\nSuccess! Combined segments for {len(all_segments)} amplicons.")

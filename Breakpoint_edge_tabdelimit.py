@@ -75,7 +75,7 @@ if all_results:
     master_df = pd.concat(all_results, ignore_index=True)
     
     # Save the combined result
-    output_path = "/Users/admin/MSc_Project/TCGA_ecDNA_Breakpoints.csv"
+    output_path = "/Users/admin/MSc_Project/ecDNA_BP_mapping/TCGA_ecDNA_Breakpoints.csv"
     master_df.to_csv(output_path, index=False)
     
     print(f"\nSuccess! Combined {len(all_results)} files into {output_path}")

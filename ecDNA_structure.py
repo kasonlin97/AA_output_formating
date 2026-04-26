@@ -1,9 +1,10 @@
 import pandas as pd
 import os
 from tqdm import tqdm
+import re
 
 # 1. SETUP PATHS
-folder_path = '/Users/admin/MSc_Project/'
+folder_path = '/Users/admin/MSc_Project/ecDNA_BP_mapping/'
 # Using the Master files created from the previous aggregation steps
 segment_file = os.path.join(folder_path, 'TCGA_ecDNA_Segments.csv')
 cycle_file = os.path.join(folder_path, 'TCGA_ecDNA_AnnotatedCycles.csv')
@@ -76,15 +77,120 @@ if final_results:
     df_final = pd.concat(final_results).reset_index(drop=True)
     df_final.fillna('None', inplace=True)
 
-    # 7. SAVE RESULT
-    output_path = os.path.join(folder_path, 'ecDNA_BP_annotation.csv')
-    df_final.to_csv(output_path, index=False)
     print(f"\nProcessing Complete.")
     print(f"Total rows in output: {len(df_final)}")
-    print(f"Results saved to: {output_path}")
 else:
     print("No data processed.")
 
+
+#================Merger with oncogenes, copy number & filter flag=================
+
+df_tcga = pd.read_csv("/Users/admin/MSc_Project/Converted_Results/TCGA_ecDNA_Analysis_result_table.csv")
+
+# 3. Clean 'Feature ID' to extract the part that matches 'Amplicon_ID'
+# This regex extracts everything from the starft up to the word 'amplicon' followed by digits
+# Example: '..._amplicon2_ecDNA_1' becomes '..._amplicon2'
+df_tcga['Cleaned_Match_ID'] = df_tcga['Feature ID'].str.extract(r'^(.*_amplicon\d+)')
+
+# 4. Prepare the TCGA subset
+# We filter for only the columns you requested + our new match key
+cols_to_keep = ['Cleaned_Match_ID', 'Oncogenes', 'Feature median copy number', 'Filter flag']
+df_tcga_subset = df_tcga[cols_to_keep]
+
+# Drop rows that didn't match the amplicon pattern and remove duplicates
+# (In case multiple feature types exist for the same amplicon)
+df_tcga_subset = df_tcga_subset.dropna(subset=['Cleaned_Match_ID']).drop_duplicates(subset=['Cleaned_Match_ID'])
+
+# 5. Merge the dataframes
+df_merged = pd.merge(
+    df_final,
+    df_tcga_subset,
+    left_on='Amplicon_ID',
+    right_on='Cleaned_Match_ID',
+    how='left'
+)
+
+# 6. Cleanup and Save
+df_merged = df_merged.drop(columns=['Cleaned_Match_ID'])
+#df_merged.to_csv("/Users/admin/BP.csv", index=False)
+
+#print(df_merged[['Amplicon_ID', 'Oncogenes', 'Feature median copy number', 'Filter flag']].head())
+
+
+#===========================Liftover coordinates=================================
+
+
+#==================================================CONVERT TO BED===================================== 
+
+# Define the columns that contain coordinates
+coord_columns = [
+    'segment_coordinate_start', 
+    'segment_coordinate_end', 
+    '5_BP_Junction', 
+    '3_BP_Junction'
+]
+
+def parse_to_bed(val):
+    if pd.isna(val) or str(val).strip() == "": return None
+    match = re.match(r'(\w+):(\d+)', str(val))
+    if match:
+        chrom_num = match.group(1) # e.g. "10"
+        pos = int(match.group(2))
+        # BED needs 'chr', but we'll save the NAME without it to match your CSV style
+        return [f"chr{chrom_num}", pos - 1, pos, f"{chrom_num}:{pos}"] 
+    return None
+
+# Deduplciate to collect all unique coordinates
+extracted_data = []
+for col in coord_columns:
+    # Apply parsing and drop None results
+    results = df_merged[col].dropna().apply(parse_to_bed)
+    extracted_data.extend([r for r in results if r is not None])
+
+# Create a DataFrame and keep only unique chromosome/position pairs
+bed_df = pd.DataFrame(extracted_data, columns=['chrom', 'start', 'end', 'name'])
+bed_df = bed_df.drop_duplicates(subset=['chrom', 'start', 'end'])
+
+#print(bed_df)
+
+# Save as a tab-separated file with no header (Standard BED)
+bed_df.to_csv('/Users/admin/MSc_Project/ecDNA_BP_mapping/hg19_coords.bed', sep='\t', index=False, header=False)
+
+
+
+
+#============Remapping liftover bed to csv===============================
+
+# 1. Build mapping (This stays mostly same, but names are now clean)
+lifted = pd.read_csv('/Users/admin/MSc_Project/ecDNA_BP_mapping/hg38_coords.bed', sep='\t', names=['chrom', 'start', 'end', 'hg19_id'])
+mapping = {}
+for _, row in lifted.iterrows():
+    # Store mapping as "10:103336109" -> "10:newpos"
+    mapping[row['hg19_id']] = f"{row['chrom'].replace('chr', '')}:{row['end']}"
+
+# 2. Update function
+def update_coord(val, mapping_dict):
+    if pd.isna(val): return val
+    match = re.match(r'(\w+):(\d+)([+-]?)', str(val))
+    if match:
+        chrom, pos, suffix = match.group(1), match.group(2), match.group(3)
+        # Create key: "10:103336109" (No 'chr', no suffix)
+        lookup_key = f"{chrom}:{pos}" 
+        
+        if lookup_key in mapping_dict:
+            # Return "10:newpos" + "-"
+            return f"{mapping_dict[lookup_key]}{suffix}"
+            
+    return val # Returns original if not found in liftOver
+
+# 3. Apply to original dataframe
+cols_to_fix = ['segment_coordinate_start', 'segment_coordinate_end', '5_BP_Junction', '3_BP_Junction']
+
+for col in cols_to_fix:
+    df_merged[col] = df_merged[col].apply(lambda x: update_coord(x, mapping))
+
+df_merged.to_csv('/Users/admin/MSc_Project/ecDNA_BP_mapping/ecDNA_structure.csv', index=False)
+print(df_merged)
                    
             
     
